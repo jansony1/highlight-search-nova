@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+app.log
+
+# Test files
+test_*.py
+test_*.mp4
+test_input/
+
+# Generated files
+static/uploads/
+static/clips/
+static/highlights/
+
+# Temporary files
+*.tmp
+*.tmp.*

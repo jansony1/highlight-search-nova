@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Nova Multimodal Embedding 测试</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1>🚀 Amazon Nova Multimodal Embedding 测试平台</h1>
+            <nav style="margin-top: 0.5rem;">
+                <a href="/highlight" style="color: #fff; text-decoration: none; padding: 0.5rem 1rem; background: #ff9900; border-radius: 4px; font-size: 0.9rem;">
+                    🎬 视频高光提取
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- 上传区域 -->
+            <section class="upload-section">
+                <h2>上传多模态数据</h2>
+                
+                <div class="upload-tabs">
+                    <button class="tab-button active" data-tab="image">📷 图像</button>
+                    <button class="tab-button" data-tab="video">🎥 视频</button>
+                    <button class="tab-button" data-tab="audio">🎵 音频</button>
+                    <button class="tab-button" data-tab="text">📝 文本</button>
+                </div>
+
+                <!-- 图像上传 -->
+                <div class="tab-content active" id="image-tab">
+                    <div class="upload-area" data-type="image">
+                        <div class="upload-icon">📷</div>
+                        <div class="upload-text">点击或拖拽图像文件到此处</div>
+                        <div style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">支持格式: PNG, JPG, JPEG, GIF, BMP</div>
+                        <input type="file" class="file-input" accept="image/*">
+                    </div>
+                    <input type="text" class="text-input" placeholder="可选：添加描述文本">
+                </div>
+
+                <!-- 视频上传 -->
+                <div class="tab-content" id="video-tab">
+                    <div class="upload-area" data-type="video">
+                        <div class="upload-icon">🎥</div>
+                        <div class="upload-text">点击或拖拽视频文件到此处</div>
+                        <div style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">支持格式: MP4, AVI, MOV, WMV (异步处理，自动分段)</div>
+                        <input type="file" class="file-input" accept="video/*">
+                    </div>
+                    <input type="text" class="text-input" placeholder="可选：添加描述文本">
+                </div>
+
+                <!-- 音频上传 -->
+                <div class="tab-content" id="audio-tab">
+                    <div class="upload-area" data-type="audio">
+                        <div class="upload-icon">🎵</div>
+                        <div class="upload-text">点击或拖拽音频文件到此处</div>
+                        <div style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">支持格式: MP3, WAV, FLAC, M4A (异步处理，自动分段)</div>
+                        <input type="file" class="file-input" accept="audio/*">
+                    </div>
+                    <input type="text" class="text-input" placeholder="可选：添加描述文本">
+                </div>
+
+                <!-- 文本输入 -->
+                <div class="tab-content" id="text-tab">
+                    <textarea class="text-input" rows="6" placeholder="输入文本内容... (最大8K tokens)"></textarea>
+                </div>
+
+                <!-- Embedding维度选择 -->
+                <div class="dimension-selector">
+                    <label for="embedding-dimension">Embedding维度:</label>
+                    <select id="embedding-dimension" class="dimension-select">
+                        <option value="1024" selected>1024 (推荐 - 高精度，中等存储)</option>
+                        <option value="3072">3072 (最高精度，最大存储)</option>
+                        <option value="384">384 (中等精度，较低存储)</option>
+                        <option value="256">256 (较低精度，最低存储)</option>
+                    </select>
+                    <div class="dimension-help">
+                        <small>维度越高精度越好，但存储成本也越高。1024维度是精度和成本的最佳平衡。</small>
+                    </div>
+                </div>
+
+                <button class="btn" id="upload-btn" disabled>上传并生成Embedding</button>
+            </section>
+
+            <!-- 搜索区域 -->
+            <section class="search-section">
+                <h2>向量搜索</h2>
+                <input type="text" class="search-input" placeholder="输入搜索查询...">
+                
+                <!-- 搜索维度选择 -->
+                <div class="search-dimension-selector">
+                    <label for="search-dimension">搜索维度:</label>
+                    <select id="search-dimension" class="dimension-select">
+                        <option value="auto">自动检测 (推荐)</option>
+                        <option value="1024">1024维</option>
+                        <option value="3072">3072维</option>
+                        <option value="384">384维</option>
+                        <option value="256">256维</option>
+                    </select>
+                    <div class="dimension-help">
+                        <small>选择要搜索的向量维度。"自动检测"会使用数据最多的维度。</small>
+                    </div>
+                </div>
+                
+                <button class="btn" id="search-btn">🔍 搜索相似内容</button>
+            </section>
+
+            <!-- 结果展示区域 -->
+            <section class="results-section">
+                <h2>搜索结果</h2>
+                <div id="results-container">
+                    <div class="loading" style="display: none;">正在搜索...</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

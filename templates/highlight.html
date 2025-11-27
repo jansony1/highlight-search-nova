@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频高光片段提取 - Amazon Nova</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/highlight.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1>🎬 视频高光片段提取 - Amazon Nova AI</h1>
+            <nav class="header-nav">
+                <a href="/">← 返回主页</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- 步骤指示器 -->
+            <div class="steps-indicator">
+                <div class="step active" data-step="1">
+                    <div class="step-number">1</div>
+                    <div class="step-label">输入主题</div>
+                </div>
+                <div class="step" data-step="2">
+                    <div class="step-number">2</div>
+                    <div class="step-label">上传视频</div>
+                </div>
+                <div class="step" data-step="3">
+                    <div class="step-number">3</div>
+                    <div class="step-label">AI分析</div>
+                </div>
+                <div class="step" data-step="4">
+                    <div class="step-number">4</div>
+                    <div class="step-label">生成高光</div>
+                </div>
+            </div>
+
+            <!-- 输入区域 -->
+            <section class="input-section">
+                <h2>📝 第一步：输入高光主题</h2>
+                <div class="input-card">
+                    <label for="theme-input">请描述您想要提取的高光主题：</label>
+                    <textarea id="theme-input" class="theme-input" rows="4" placeholder="例如：孩子在游乐园的快乐时刻&#10;例如：家庭聚会中的温馨瞬间&#10;例如：运动比赛中的精彩瞬间"></textarea>
+                    <div class="input-help">
+                        💡 提示：描述越具体，AI生成的高光标准越准确
+                    </div>
+                </div>
+            </section>
+
+            <!-- 视频上传区域 -->
+            <section class="upload-section">
+                <h2>🎥 第二步：上传视频</h2>
+                <div class="input-card">
+                    <div class="upload-area" id="video-upload-area">
+                        <div class="upload-icon">🎥</div>
+                        <div class="upload-text">点击或拖拽视频文件到此处</div>
+                        <div class="upload-hint">支持格式: MP4, AVI, MOV, WMV (最大500MB)</div>
+                        <input type="file" id="video-input" class="file-input" accept="video/*">
+                    </div>
+                    <div id="video-preview" class="video-preview" style="display: none;">
+                        <video id="preview-video" controls></video>
+                        <div class="video-info">
+                            <span id="video-name"></span>
+                            <button class="btn-small btn-secondary" id="change-video-btn">更换视频</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 开始处理按钮 -->
+            <div class="action-buttons">
+                <button class="btn btn-primary btn-large" id="start-process-btn" disabled>
+                    🚀 开始处理并生成高光视频
+                </button>
+            </div>
+
+            <!-- 进度区域 -->
+            <section class="progress-section" id="progress-section" style="display: none;">
+                <h2>⏳ 处理中...</h2>
+                <div class="progress-card">
+                    <div class="progress-steps">
+                        <div class="progress-step" id="progress-step-1">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">生成高光判定标准</div>
+                                <div class="progress-step-status">等待中...</div>
+                                <!-- 标准显示和编辑区域 -->
+                                <div id="criteria-inline" class="step-result" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: #f0f8ff; border-left: 3px solid #ff9900; border-radius: 4px;">
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">📋 生成的标准：</div>
+                                    <textarea id="criteria-inline-content" style="width: 100%; min-height: 150px; white-space: pre-wrap; font-size: 0.85rem; color: #555; line-height: 1.5; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit;" placeholder="标准加载中..."></textarea>
+                                    <div style="margin-top: 0.5rem; text-align: right;">
+                                        <button id="confirm-criteria-btn" class="btn btn-small btn-primary" style="padding: 0.4rem 1rem; font-size: 0.85rem;">✅ 确认标准并继续</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="progress-step-2">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">压缩视频</div>
+                                <div class="progress-step-status">等待中...</div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="progress-step-3">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">AI分析视频内容</div>
+                                <div class="progress-step-status">等待中...</div>
+                                <!-- 分析结果显示和编辑区域 -->
+                                <div id="analysis-inline" class="step-result" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: #f0fff4; border-left: 3px solid #52c41a; border-radius: 4px;">
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">🎯 分析结果：</div>
+                                    <textarea id="analysis-inline-content" style="width: 100%; min-height: 200px; white-space: pre-wrap; font-size: 0.85rem; color: #555; line-height: 1.5; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit;" placeholder="分析结果加载中..."></textarea>
+                                    <div style="margin-top: 0.5rem; text-align: right;">
+                                        <button id="confirm-analysis-btn" class="btn btn-small btn-primary" style="padding: 0.4rem 1rem; font-size: 0.85rem;">✅ 确认分析并继续</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="progress-step-4">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">切片并生成向量嵌入</div>
+                                <div class="progress-step-status">等待中...</div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="progress-step-5">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">匹配高光片段</div>
+                                <div class="progress-step-status">等待中...</div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="progress-step-6">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">拼接高光视频</div>
+                                <div class="progress-step-status">等待中...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" id="progress-bar-fill"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">0%</div>
+                </div>
+            </section>
+
+            <!-- 生成标准展示区域 -->
+            <section class="criteria-section" id="criteria-section" style="display: none;">
+                <h2>✨ AI生成的高光判定标准</h2>
+                <div class="criteria-card">
+                    <div id="criteria-content"></div>
+                </div>
+            </section>
+
+            <!-- 分析结果展示区域 -->
+            <section class="analysis-section" id="analysis-section" style="display: none;">
+                <h2>🎯 视频分析结果</h2>
+                <div class="analysis-card">
+                    <div id="analysis-content"></div>
+                </div>
+            </section>
+
+            <!-- 匹配片段展示区域 -->
+            <section class="clips-section" id="clips-section" style="display: none;">
+                <h2>🎬 匹配的高光片段</h2>
+                <div class="clips-container" id="clips-container"></div>
+            </section>
+
+            <!-- 最终结果区域 -->
+            <section class="result-section" id="result-section" style="display: none;">
+                <h2>🎉 高光视频生成完成！</h2>
+
+                <!-- 显示使用的标准和分析 -->
+                <div class="result-card" style="margin-bottom: 1.5rem; background: #fafafa;">
+                    <h3 style="margin-bottom: 1rem;">📋 使用的高光判定标准</h3>
+                    <div id="final-criteria" style="white-space: pre-wrap; padding: 1rem; background: #fff; border-radius: 4px; border: 1px solid #e0e0e0; font-size: 0.9rem; color: #555; line-height: 1.6;"></div>
+
+                    <h3 style="margin:  1.5rem 0 1rem 0;">🎯 AI分析结果</h3>
+                    <div id="final-analysis" style="white-space: pre-wrap; padding: 1rem; background: #fff; border-radius: 4px; border: 1px solid #e0e0e0; font-size: 0.9rem; color: #555; line-height: 1.6;"></div>
+                </div>
+
+                <div class="result-card">
+                    <div class="result-video">
+                        <video id="result-video" controls></video>
+                    </div>
+                    <div class="result-actions">
+                        <button class="btn btn-primary" id="download-btn">
+                            ⬇️ 下载高光视频
+                        </button>
+                        <button class="btn btn-secondary" id="restart-btn">
+                            🔄 重新开始
+                        </button>
+                    </div>
+                    <div class="result-info">
+                        <div class="info-item">
+                            <span class="info-label">原视频时长：</span>
+                            <span class="info-value" id="original-duration">--</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">高光片段数：</span>
+                            <span class="info-value" id="clips-count">--</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">高光视频时长：</span>
+                            <span class="info-value" id="highlight-duration">--</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/highlight.js') }}"></script>
+</body>
+</html>
