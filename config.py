@@ -7,7 +7,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key'
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    AWS_REGION = os.environ.get('AWS_REGION') or 'us-east-1'
+    AWS_REGION = 'us-east-1'  # 统一使用 us-east-1
     S3_BUCKET = os.environ.get('S3_BUCKET') or 'nova-mm-test-bucket'
     UPLOAD_FOLDER = 'static/uploads'
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB

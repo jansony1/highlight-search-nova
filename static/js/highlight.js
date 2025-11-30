@@ -11,9 +11,10 @@ class HighlightExtractor {
         this.selectedFile = null;
         this.jobId = null;
         this.pollingInterval = null;
-        this.waitingForConfirmation = false;  // 是否在等待用户确认
-        this.confirmedCriteria = null;  // 用户确认的标准
-        this.confirmedAnalysis = null;  // 用户确认的分析
+        this.waitingForConfirmation = false;
+        this.confirmedCriteria = null;
+        this.confirmedAnalysis = null;
+        this.extractionMode = 'embedding';  // 'embedding' or 'direct'
 
         this.init();
     }
@@ -23,13 +24,16 @@ class HighlightExtractor {
     }
 
     setupEventListeners() {
+        // 方法选择
+        document.querySelectorAll('input[name="extraction-method"]').forEach(radio => {
+            radio.addEventListener('change', (e) => this.handleMethodChange(e.target.value));
+        });
+
         // 主题输入
         this.themeInput.addEventListener('input', () => this.updateStartButton());
 
-        // 视频上传区域点击
+        // 视频上传
         this.uploadArea.addEventListener('click', () => this.videoInput.click());
-
-        // 文件选择
         this.videoInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.handleFileSelect(e.target.files[0]);
@@ -41,11 +45,9 @@ class HighlightExtractor {
             e.preventDefault();
             this.uploadArea.classList.add('dragover');
         });
-
         this.uploadArea.addEventListener('dragleave', () => {
             this.uploadArea.classList.remove('dragover');
         });
-
         this.uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             this.uploadArea.classList.remove('dragover');
@@ -67,9 +69,31 @@ class HighlightExtractor {
         document.getElementById('download-btn')?.addEventListener('click', () => this.downloadVideo());
         document.getElementById('restart-btn')?.addEventListener('click', () => this.restart());
 
-        // 确认按钮
+        // 确认按钮 - 语义匹配模式
         document.getElementById('confirm-criteria-btn')?.addEventListener('click', () => this.confirmCriteria());
         document.getElementById('confirm-analysis-btn')?.addEventListener('click', () => this.confirmAnalysis());
+
+        // 确认按钮 - 直接定位模式
+        document.getElementById('direct-confirm-summary-btn')?.addEventListener('click', () => this.directConfirmSummary());
+        document.getElementById('direct-confirm-highlights-btn')?.addEventListener('click', () => this.directConfirmHighlights());
+    }
+
+    handleMethodChange(method) {
+        this.extractionMode = method;
+
+        // 切换UI显示
+        const themeArea = document.getElementById('theme-input-area');
+        const directHint = document.getElementById('direct-mode-hint');
+
+        if (method === 'embedding') {
+            themeArea.style.display = 'block';
+            directHint.style.display = 'none';
+        } else {
+            themeArea.style.display = 'none';
+            directHint.style.display = 'block';
+        }
+
+        this.updateStartButton();
     }
 
     handleFileSelect(file) {
@@ -78,7 +102,7 @@ class HighlightExtractor {
             return;
         }
 
-        const maxSize = 500 * 1024 * 1024; // 500MB
+        const maxSize = 500 * 1024 * 1024;
         if (file.size > maxSize) {
             alert('视频文件过大，请选择小于500MB的文件');
             return;
@@ -87,7 +111,6 @@ class HighlightExtractor {
         this.selectedFile = file;
         this.videoName.textContent = file.name;
 
-        // 显示视频预览
         const url = URL.createObjectURL(file);
         this.previewVideo.src = url;
         this.uploadArea.style.display = 'none';
@@ -98,9 +121,15 @@ class HighlightExtractor {
     }
 
     updateStartButton() {
-        const theme = this.themeInput.value.trim();
         const hasVideo = this.selectedFile !== null;
-        this.startBtn.disabled = !(theme && hasVideo);
+
+        if (this.extractionMode === 'embedding') {
+            const theme = this.themeInput.value.trim();
+            this.startBtn.disabled = !(theme && hasVideo);
+        } else {
+            // 直接定位模式只需要视频
+            this.startBtn.disabled = !hasVideo;
+        }
     }
 
     updateSteps(step) {
@@ -122,17 +151,24 @@ class HighlightExtractor {
         this.startBtn.disabled = true;
         this.startBtn.textContent = '处理中...';
 
+        if (this.extractionMode === 'embedding') {
+            await this.startEmbeddingMode();
+        } else {
+            await this.startDirectMode();
+        }
+    }
+
+    async startEmbeddingMode() {
         // 显示进度区域
         document.getElementById('progress-section').style.display = 'block';
+        document.getElementById('direct-progress-section').style.display = 'none';
         this.updateSteps(3);
 
-        // 准备表单数据
         const formData = new FormData();
         formData.append('theme', this.themeInput.value.trim());
         formData.append('video', this.selectedFile);
 
         try {
-            // 发送请求
             const response = await fetch('/api/extract-highlight', {
                 method: 'POST',
                 body: formData
@@ -145,8 +181,39 @@ class HighlightExtractor {
             const result = await response.json();
             this.jobId = result.job_id;
 
-            // 开始轮询状态
             this.startPolling();
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert('处理失败：' + error.message);
+            this.startBtn.disabled = false;
+            this.startBtn.textContent = '🚀 开始处理并生成高光视频';
+        }
+    }
+
+    async startDirectMode() {
+        // 显示直接定位进度区域
+        document.getElementById('direct-progress-section').style.display = 'block';
+        document.getElementById('progress-section').style.display = 'none';
+        this.updateSteps(3);
+
+        const formData = new FormData();
+        formData.append('video', this.selectedFile);
+
+        try {
+            const response = await fetch('/api/extract-direct', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('处理请求失败');
+            }
+
+            const result = await response.json();
+            this.jobId = result.job_id;
+
+            this.startDirectPolling();
 
         } catch (error) {
             console.error('Error:', error);
@@ -159,12 +226,17 @@ class HighlightExtractor {
     startPolling() {
         this.pollingInterval = setInterval(() => {
             this.checkJobStatus();
-        }, 2000); // 每2秒检查一次
+        }, 2000);
+    }
+
+    startDirectPolling() {
+        this.pollingInterval = setInterval(() => {
+            this.checkDirectJobStatus();
+        }, 2000);
     }
 
     async checkJobStatus() {
         try {
-            // 如果正在等待用户确认，暂停轮询
             if (this.waitingForConfirmation) {
                 return;
             }
@@ -191,21 +263,37 @@ class HighlightExtractor {
         }
     }
 
-    confirmCriteria() {
-        // 获取用户编辑后的标准
-        this.confirmedCriteria = document.getElementById('criteria-inline-content').value;
+    async checkDirectJobStatus() {
+        try {
+            const response = await fetch(`/api/job-status/${this.jobId}`);
+            if (!response.ok) {
+                throw new Error('获取状态失败');
+            }
 
-        // 禁用编辑和按钮
+            const status = await response.json();
+            this.updateDirectProgress(status);
+
+            if (status.status === 'completed') {
+                clearInterval(this.pollingInterval);
+                this.showResults(status);
+            } else if (status.status === 'failed') {
+                clearInterval(this.pollingInterval);
+                alert('处理失败：' + status.error);
+                this.restart();
+            }
+
+        } catch (error) {
+            console.error('Error checking status:', error);
+        }
+    }
+
+    confirmCriteria() {
+        this.confirmedCriteria = document.getElementById('criteria-inline-content').value;
         document.getElementById('criteria-inline-content').disabled = true;
         document.getElementById('confirm-criteria-btn').disabled = true;
         document.getElementById('confirm-criteria-btn').textContent = '✓ 已确认';
-
-        // 恢复轮询
         this.waitingForConfirmation = false;
 
-        console.log('Criteria confirmed:', this.confirmedCriteria);
-
-        // 发送确认的标准到后端（可选，用于更新任务状态）
         fetch(`/api/confirm-criteria/${this.jobId}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -214,20 +302,12 @@ class HighlightExtractor {
     }
 
     confirmAnalysis() {
-        // 获取用户编辑后的分析
         this.confirmedAnalysis = document.getElementById('analysis-inline-content').value;
-
-        // 禁用编辑和按钮
         document.getElementById('analysis-inline-content').disabled = true;
         document.getElementById('confirm-analysis-btn').disabled = true;
         document.getElementById('confirm-analysis-btn').textContent = '✓ 已确认';
-
-        // 恢复轮询
         this.waitingForConfirmation = false;
 
-        console.log('Analysis confirmed:', this.confirmedAnalysis);
-
-        // 发送确认的分析到后端（可选）
         fetch(`/api/confirm-analysis/${this.jobId}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -235,15 +315,59 @@ class HighlightExtractor {
         }).catch(err => console.error('Failed to save analysis:', err));
     }
 
+    async directConfirmSummary() {
+        console.log('[DirectMode] Confirming summary, jobId:', this.jobId);
+        const criteria = document.getElementById('direct-criteria-content').value;
+        console.log('[DirectMode] Criteria length:', criteria.length);
+
+        document.getElementById('direct-criteria-content').disabled = true;
+        document.getElementById('direct-confirm-summary-btn').disabled = true;
+        document.getElementById('direct-confirm-summary-btn').textContent = '✓ 已确认';
+
+        try {
+            const response = await fetch(`/api/direct-confirm-summary/${this.jobId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({criteria: criteria})
+            });
+            console.log('[DirectMode] Confirmation response status:', response.status);
+            if (!response.ok) {
+                const error = await response.json();
+                console.error('[DirectMode] Confirmation failed:', error);
+            }
+        } catch (error) {
+            console.error('[DirectMode] Failed to confirm summary:', error);
+        }
+    }
+
+    async directConfirmHighlights() {
+        const highlightsJson = document.getElementById('direct-highlights-content').value;
+
+        try {
+            const highlights = JSON.parse(highlightsJson);
+
+            document.getElementById('direct-highlights-content').disabled = true;
+            document.getElementById('direct-confirm-highlights-btn').disabled = true;
+            document.getElementById('direct-confirm-highlights-btn').textContent = '✓ 已确认';
+
+            await fetch(`/api/direct-confirm-highlights/${this.jobId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({highlights: highlights})
+            });
+        } catch (error) {
+            alert('JSON格式错误，请检查！');
+            console.error('JSON parse error:', error);
+        }
+    }
+
     updateProgress(status) {
         const step = status.current_step || 1;
         const progress = status.progress || 0;
 
-        // 更新进度条
         document.getElementById('progress-bar-fill').style.width = progress + '%';
         document.getElementById('progress-text').textContent = Math.round(progress) + '%';
 
-        // 更新步骤状态
         for (let i = 1; i <= 6; i++) {
             const stepEl = document.getElementById(`progress-step-${i}`);
             if (i < step) {
@@ -256,33 +380,28 @@ class HighlightExtractor {
                 stepEl.classList.remove('active', 'completed');
             }
 
-            // 更新状态文本
             const statusEl = stepEl.querySelector('.progress-step-status');
             if (status.step_messages && status.step_messages[i]) {
                 statusEl.textContent = status.step_messages[i];
             }
         }
 
-        // 显示生成的标准（在步骤1下方）并暂停轮询等待确认
+        // 显示生成的标准
         if (status.criteria && !this.confirmedCriteria) {
             const criteriaInline = document.getElementById('criteria-inline');
             if (criteriaInline && (criteriaInline.style.display === 'none' || !criteriaInline.style.display)) {
                 document.getElementById('criteria-inline-content').value = status.criteria;
                 criteriaInline.style.display = 'block';
-
-                // 暂停轮询，等待用户确认
                 this.waitingForConfirmation = true;
             }
         }
 
-        // 显示分析结果（在步骤3下方）并暂停轮询等待确认
+        // 显示分析结果
         if (status.analysis && !this.confirmedAnalysis) {
             const analysisInline = document.getElementById('analysis-inline');
             if (analysisInline && (analysisInline.style.display === 'none' || !analysisInline.style.display)) {
                 document.getElementById('analysis-inline-content').value = status.analysis;
                 analysisInline.style.display = 'block';
-
-                // 暂停轮询，等待用户确认
                 this.waitingForConfirmation = true;
             }
         }
@@ -290,6 +409,51 @@ class HighlightExtractor {
         // 显示匹配的片段
         if (status.clips && status.clips.length > 0) {
             this.showClips(status.clips);
+        }
+    }
+
+    updateDirectProgress(status) {
+        const step = status.current_step || 1;
+        const progress = status.progress || 0;
+
+        document.getElementById('direct-progress-bar-fill').style.width = progress + '%';
+        document.getElementById('direct-progress-text').textContent = Math.round(progress) + '%';
+
+        for (let i = 1; i <= 3; i++) {
+            const stepEl = document.getElementById(`direct-step-${i}`);
+            if (i < step) {
+                stepEl.classList.remove('active');
+                stepEl.classList.add('completed');
+            } else if (i === step) {
+                stepEl.classList.add('active');
+                stepEl.classList.remove('completed');
+            } else {
+                stepEl.classList.remove('active', 'completed');
+            }
+
+            const statusEl = stepEl.querySelector('.progress-step-status');
+            if (status.step_messages && status.step_messages[i]) {
+                statusEl.textContent = status.step_messages[i];
+            }
+        }
+
+        // 显示总结和标准
+        if (status.summary && status.criteria && status.waiting_for === 'summary_confirmation') {
+            const summaryInline = document.getElementById('direct-summary-inline');
+            if (summaryInline && (summaryInline.style.display === 'none' || !summaryInline.style.display)) {
+                document.getElementById('direct-summary-content').textContent = status.summary;
+                document.getElementById('direct-criteria-content').value = status.criteria;
+                summaryInline.style.display = 'block';
+            }
+        }
+
+        // 显示高光片段
+        if (status.highlights_data && status.waiting_for === 'highlights_confirmation') {
+            const highlightsInline = document.getElementById('direct-highlights-inline');
+            if (highlightsInline && (highlightsInline.style.display === 'none' || !highlightsInline.style.display)) {
+                document.getElementById('direct-highlights-content').value = JSON.stringify(status.highlights_data, null, 2);
+                highlightsInline.style.display = 'block';
+            }
         }
     }
 
@@ -320,19 +484,31 @@ class HighlightExtractor {
     showResults(status) {
         this.updateSteps(4);
 
-        // 显示最终结果
         const resultSection = document.getElementById('result-section');
         const resultVideo = document.getElementById('result-video');
 
         resultVideo.src = status.highlight_video_url;
         resultSection.style.display = 'block';
 
-        // 显示使用的标准和分析结果
-        if (this.confirmedCriteria || status.criteria) {
-            document.getElementById('final-criteria').textContent = this.confirmedCriteria || status.criteria;
-        }
-        if (this.confirmedAnalysis || status.analysis) {
-            document.getElementById('final-analysis').textContent = this.confirmedAnalysis || status.analysis;
+        // 显示使用的标准和分析
+        if (this.extractionMode === 'embedding') {
+            if (this.confirmedCriteria || status.criteria) {
+                document.getElementById('final-criteria').textContent = this.confirmedCriteria || status.criteria;
+            }
+            if (this.confirmedAnalysis || status.analysis) {
+                document.getElementById('final-analysis').textContent = this.confirmedAnalysis || status.analysis;
+            }
+        } else {
+            // 直接定位模式
+            if (status.confirmed_criteria || status.criteria) {
+                document.getElementById('final-criteria').textContent = status.confirmed_criteria || status.criteria;
+            }
+            if (status.final_highlights) {
+                const highlightsList = status.final_highlights.map((h, i) =>
+                    `${i+1}. [${h.start_time.toFixed(1)}s - ${h.end_time.toFixed(1)}s] ${h.description}`
+                ).join('\n');
+                document.getElementById('final-analysis').textContent = highlightsList;
+            }
         }
 
         // 更新统计信息
@@ -342,8 +518,8 @@ class HighlightExtractor {
 
         // 隐藏进度区域
         document.getElementById('progress-section').style.display = 'none';
+        document.getElementById('direct-progress-section').style.display = 'none';
 
-        // 滚动到结果
         resultSection.scrollIntoView({ behavior: 'smooth' });
     }
 

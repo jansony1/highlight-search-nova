@@ -41,12 +41,51 @@
 
             <!-- 输入区域 -->
             <section class="input-section">
-                <h2>📝 第一步：输入高光主题</h2>
+                <h2>📝 第一步：选择提取方式并输入主题</h2>
                 <div class="input-card">
-                    <label for="theme-input">请描述您想要提取的高光主题：</label>
-                    <textarea id="theme-input" class="theme-input" rows="4" placeholder="例如：孩子在游乐园的快乐时刻&#10;例如：家庭聚会中的温馨瞬间&#10;例如：运动比赛中的精彩瞬间"></textarea>
-                    <div class="input-help">
-                        💡 提示：描述越具体，AI生成的高光标准越准确
+                    <!-- 方法选择 -->
+                    <div class="method-selector" style="margin-bottom: 1.5rem;">
+                        <label style="display: block; margin-bottom: 0.75rem; font-weight: 600; color: #232f3e;">
+                            🎯 选择高光提取方式：
+                        </label>
+                        <div class="method-options" style="display: flex; gap: 1rem;">
+                            <label class="method-option" style="flex: 1; padding: 1rem; border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer; transition: all 0.3s;">
+                                <input type="radio" name="extraction-method" value="embedding" checked style="margin-right: 0.5rem;">
+                                <div style="display: inline-block; vertical-align: top;">
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.25rem;">🔍 语义匹配模式</div>
+                                    <div style="font-size: 0.85rem; color: #666;">使用embedding向量匹配，适合主题明确的场景</div>
+                                </div>
+                            </label>
+                            <label class="method-option" style="flex: 1; padding: 1rem; border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer; transition: all 0.3s;">
+                                <input type="radio" name="extraction-method" value="direct" style="margin-right: 0.5rem;">
+                                <div style="display: inline-block; vertical-align: top;">
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.25rem;">⚡ 直接定位模式</div>
+                                    <div style="font-size: 0.85rem; color: #666;">AI直接分析并定位时间戳，更快速准确</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 主题输入（语义匹配模式） -->
+                    <div id="theme-input-area">
+                        <label for="theme-input">请描述您想要提取的高光主题：</label>
+                        <textarea id="theme-input" class="theme-input" rows="4" placeholder="例如：孩子在游乐园的快乐时刻&#10;例如：家庭聚会中的温馨瞬间&#10;例如：运动比赛中的精彩瞬间"></textarea>
+                        <div class="input-help">
+                            💡 提示：描述越具体，AI生成的高光标准越准确
+                        </div>
+                    </div>
+
+                    <!-- 直接定位模式提示 -->
+                    <div id="direct-mode-hint" style="display: none;">
+                        <div class="input-help" style="background: #f0f8ff; padding: 1rem; border-left: 3px solid #ff9900; border-radius: 4px;">
+                            💡 <strong>直接定位模式说明：</strong>
+                            <ul style="margin: 0.5rem 0 0 1.5rem; font-size: 0.9rem;">
+                                <li>AI将自动分析视频内容，生成总结和高光标准</li>
+                                <li>然后直接定位高光片段的精确时间戳</li>
+                                <li>您可以在处理过程中编辑和确认AI的分析结果</li>
+                                <li>处理速度更快，定位更精确</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -78,9 +117,9 @@
                 </button>
             </div>
 
-            <!-- 进度区域 -->
+            <!-- 进度区域 - 语义匹配模式 -->
             <section class="progress-section" id="progress-section" style="display: none;">
-                <h2>⏳ 处理中...</h2>
+                <h2>⏳ 处理中... (语义匹配模式)</h2>
                 <div class="progress-card">
                     <div class="progress-steps">
                         <div class="progress-step" id="progress-step-1">
@@ -146,6 +185,62 @@
                         <div class="progress-bar-fill" id="progress-bar-fill"></div>
                     </div>
                     <div class="progress-text" id="progress-text">0%</div>
+                </div>
+            </section>
+
+            <!-- 进度区域 - 直接定位模式 -->
+            <section class="progress-section" id="direct-progress-section" style="display: none;">
+                <h2>⏳ 处理中... (直接定位模式)</h2>
+                <div class="progress-card">
+                    <div class="progress-steps">
+                        <div class="progress-step" id="direct-step-1">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">生成视频总结和高光标准</div>
+                                <div class="progress-step-status">等待中...</div>
+                                <!-- 总结和标准显示 -->
+                                <div id="direct-summary-inline" class="step-result" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: #f0f8ff; border-left: 3px solid #ff9900; border-radius: 4px;">
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">📊 视频总结：</div>
+                                    <div id="direct-summary-content" style="white-space: pre-wrap; font-size: 0.9rem; color: #555; line-height: 1.5; margin-bottom: 1rem;"></div>
+
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">📋 高光判定标准：</div>
+                                    <textarea id="direct-criteria-content" style="width: 100%; min-height: 150px; white-space: pre-wrap; font-size: 0.85rem; color: #555; line-height: 1.5; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit;"></textarea>
+                                    <div style="margin-top: 0.5rem; text-align: right;">
+                                        <button id="direct-confirm-summary-btn" class="btn btn-small btn-primary">✅ 确认并继续</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="direct-step-2">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">识别高光时刻并定位时间戳</div>
+                                <div class="progress-step-status">等待中...</div>
+                                <!-- 高光片段显示 -->
+                                <div id="direct-highlights-inline" class="step-result" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: #f0fff4; border-left: 3px solid #52c41a; border-radius: 4px;">
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">🎬 识别到的高光片段：</div>
+                                    <textarea id="direct-highlights-content" style="width: 100%; min-height: 250px; white-space: pre-wrap; font-size: 0.85rem; color: #555; line-height: 1.5; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: 'Monaco', 'Courier New', monospace;"></textarea>
+                                    <div style="margin-top: 0.5rem; text-align: right;">
+                                        <button id="direct-confirm-highlights-btn" class="btn btn-small btn-primary">✅ 确认并开始提取</button>
+                                    </div>
+                                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                                        💡 您可以编辑JSON格式的时间戳和描述
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="progress-step" id="direct-step-3">
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-content">
+                                <div class="progress-step-title">提取并拼接高光片段</div>
+                                <div class="progress-step-status">等待中...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" id="direct-progress-bar-fill"></div>
+                    </div>
+                    <div class="progress-text" id="direct-progress-text">0%</div>
                 </div>
             </section>
 
