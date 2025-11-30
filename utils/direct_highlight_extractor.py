@@ -4,13 +4,15 @@ import base64
 import subprocess
 import os
 import uuid
+import threading
 from pathlib import Path
 from config import Config
+from utils.gemini_analyzer import GeminiAnalyzer
 
 class DirectHighlightExtractor:
     """
     直接时间定位模式的高光提取器
-    使用Nova Pro直接分析视频并返回时间戳，不使用embedding匹配
+    支持并行调用Nova Pro和Gemini进行视频分析
     """
     def __init__(self):
         from botocore.config import Config as BotoConfig
@@ -33,21 +35,124 @@ class DirectHighlightExtractor:
         )
         self.bucket_name = Config.S3_BUCKET
 
-    def generate_summary_and_criteria(self, video_path):
+        # 初始化Gemini分析器
+        try:
+            self.gemini_analyzer = GeminiAnalyzer()
+        except Exception as e:
+            print(f"[警告] Gemini分析器初始化失败: {str(e)}")
+            self.gemini_analyzer = None
+
+    def generate_summary_and_criteria_parallel(self, video_path):
         """
-        步骤1: 使用Nova Pro分析视频，生成总结和高光标准
+        步骤1: 并行使用Nova Pro和Gemini分析视频，生成总结和高光标准
+
+        Returns:
+            {
+                'nova': {'analysis': str, 'model': 'Amazon Nova Pro', 'error': None},
+                'gemini_flash': {'analysis': str, 'model': 'Gemini 2.5 Flash', 'error': None},
+                'gemini_pro': {'analysis': str, 'model': 'Gemini 2.5 Pro', 'error': None},
+                'compressed_path': str
+            }
         """
         try:
             # 获取视频信息
             file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
             duration = self.get_video_duration(video_path)
 
-            print(f"[直接定位-步骤1] 视频大小: {file_size:.2f}MB, 时长: {duration:.2f}秒")
+            print(f"[并行分析] 视频大小: {file_size:.2f}MB, 时长: {duration:.2f}秒")
 
             # 先压缩视频（如果需要）
             compressed_path = self._compress_if_needed(video_path)
 
-            prompt = """请分析这个视频并完成以下任务：
+            # 准备结果容器
+            results = {
+                'nova': {'analysis': None, 'model': 'Amazon Nova Pro', 'error': None},
+                'gemini_flash': {'analysis': None, 'model': 'Gemini 2.5 Flash', 'error': None},
+                'gemini_pro': {'analysis': None, 'model': 'Gemini 2.5 Pro', 'error': None},
+                'compressed_path': compressed_path
+            }
+
+            # 定义Nova分析函数
+            def analyze_with_nova():
+                try:
+                    print(f"[Nova] 开始分析...")
+                    analysis, _ = self._generate_summary_nova(compressed_path)
+                    results['nova']['analysis'] = analysis
+                    print(f"[Nova] 分析完成")
+                except Exception as e:
+                    print(f"[Nova] 错误: {str(e)}")
+                    results['nova']['error'] = str(e)
+
+            # 定义Gemini Flash分析函数
+            def analyze_with_gemini_flash():
+                if not self.gemini_analyzer:
+                    results['gemini_flash']['error'] = "Gemini分析器未初始化"
+                    return
+                try:
+                    print(f"[Gemini Flash] 开始分析...")
+                    analysis, _ = self.gemini_analyzer.generate_summary_and_criteria(
+                        compressed_path, model_name='gemini-2.5-flash'
+                    )
+                    results['gemini_flash']['analysis'] = analysis
+                    print(f"[Gemini Flash] 分析完成")
+                except Exception as e:
+                    print(f"[Gemini Flash] 错误: {str(e)}")
+                    results['gemini_flash']['error'] = str(e)
+
+            # 定义Gemini Pro分析函数
+            def analyze_with_gemini_pro():
+                if not self.gemini_analyzer:
+                    results['gemini_pro']['error'] = "Gemini分析器未初始化"
+                    return
+                try:
+                    print(f"[Gemini Pro] 开始分析...")
+                    analysis, _ = self.gemini_analyzer.generate_summary_and_criteria(
+                        compressed_path, model_name='gemini-2.5-pro'
+                    )
+                    results['gemini_pro']['analysis'] = analysis
+                    print(f"[Gemini Pro] 分析完成")
+                except Exception as e:
+                    print(f"[Gemini Pro] 错误: {str(e)}")
+                    results['gemini_pro']['error'] = str(e)
+
+            # 并行执行
+            threads = [
+                threading.Thread(target=analyze_with_nova),
+                threading.Thread(target=analyze_with_gemini_flash),
+                threading.Thread(target=analyze_with_gemini_pro)
+            ]
+
+            print(f"[并行分析] 启动3个并行分析线程...")
+            for thread in threads:
+                thread.start()
+
+            # 等待所有线程完成
+            for thread in threads:
+                thread.join()
+
+            print(f"[并行分析] 所有分析完成")
+
+            # 检查至少有一个成功
+            success_count = sum(1 for r in [results['nova'], results['gemini_flash'], results['gemini_pro']]
+                              if r['analysis'] is not None)
+
+            if success_count == 0:
+                raise Exception("所有AI模型分析都失败了")
+
+            print(f"[并行分析] 成功: {success_count}/3")
+            return results
+
+        except Exception as e:
+            print(f"[并行分析] 错误: {str(e)}")
+            raise
+
+    def _generate_summary_nova(self, compressed_path):
+        """
+        使用Nova Pro分析视频（原有逻辑）
+        """
+        file_size = os.path.getsize(compressed_path) / (1024 * 1024)
+
+        prompt = """请分析这个视频并完成以下任务：
 
 ### Task 1: 视频总结
 简要描述视频的整体内容、主题和风格（2-3句话）。
@@ -71,38 +176,54 @@ class DirectHighlightExtractor:
 
 请确保标准具体且可执行，便于后续识别高光片段。"""
 
-            # 调用Nova Pro
-            if file_size < 25:
-                print(f"[直接定位-步骤1] 使用inline base64分析")
-                with open(compressed_path, 'rb') as f:
-                    video_base64 = base64.b64encode(f.read()).decode('utf-8')
+        # 调用Nova Pro
+        if file_size < 25:
+            with open(compressed_path, 'rb') as f:
+                video_base64 = base64.b64encode(f.read()).decode('utf-8')
 
-                response = self.bedrock.invoke_model(
-                    modelId="amazon.nova-pro-v1:0",
-                    body=json.dumps({
-                        "messages": [{
-                            "role": "user",
-                            "content": [
-                                {
-                                    "video": {
-                                        "format": "mp4",
-                                        "source": {"bytes": video_base64}
-                                    }
-                                },
-                                {"text": prompt}
-                            ]
-                        }],
-                        "inferenceConfig": {
-                            "max_new_tokens": 2000
-                        }
-                    })
-                )
-            else:
-                print(f"[直接定位-步骤1] 使用S3 URI分析")
-                response = self._analyze_via_s3(compressed_path, prompt)
+            response = self.bedrock.invoke_model(
+                modelId="amazon.nova-pro-v1:0",
+                body=json.dumps({
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {
+                                "video": {
+                                    "format": "mp4",
+                                    "source": {"bytes": video_base64}
+                                }
+                            },
+                            {"text": prompt}
+                        ]
+                    }],
+                    "inferenceConfig": {
+                        "max_new_tokens": 2000
+                    }
+                })
+            )
+        else:
+            response = self._analyze_via_s3(compressed_path, prompt)
 
-            result = json.loads(response['body'].read())
-            analysis = result['output']['message']['content'][0]['text']
+        result = json.loads(response['body'].read())
+        analysis = result['output']['message']['content'][0]['text']
+
+        return analysis, compressed_path
+
+    def generate_summary_and_criteria(self, video_path):
+        """
+        步骤1: 使用Nova Pro分析视频，生成总结和高光标准（保留向后兼容）
+        """
+        try:
+            # 获取视频信息
+            file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
+            duration = self.get_video_duration(video_path)
+
+            print(f"[直接定位-步骤1] 视频大小: {file_size:.2f}MB, 时长: {duration:.2f}秒")
+
+            # 先压缩视频（如果需要）
+            compressed_path = self._compress_if_needed(video_path)
+
+            analysis, _ = self._generate_summary_nova(compressed_path)
 
             print(f"[直接定位-步骤1] 分析完成，长度: {len(analysis)} 字符")
             return analysis, compressed_path

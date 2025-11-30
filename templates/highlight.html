@@ -196,17 +196,61 @@
                         <div class="progress-step" id="direct-step-1">
                             <div class="progress-step-icon">⏳</div>
                             <div class="progress-step-content">
-                                <div class="progress-step-title">生成视频总结和高光标准</div>
+                                <div class="progress-step-title">并行生成视频总结和高光标准 (Nova + Gemini)</div>
                                 <div class="progress-step-status">等待中...</div>
-                                <!-- 总结和标准显示 -->
-                                <div id="direct-summary-inline" class="step-result" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: #f0f8ff; border-left: 3px solid #ff9900; border-radius: 4px;">
-                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">📊 视频总结：</div>
-                                    <div id="direct-summary-content" style="white-space: pre-wrap; font-size: 0.9rem; color: #555; line-height: 1.5; margin-bottom: 1rem;"></div>
 
-                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">📋 高光判定标准：</div>
-                                    <textarea id="direct-criteria-content" style="width: 100%; min-height: 150px; white-space: pre-wrap; font-size: 0.85rem; color: #555; line-height: 1.5; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit;"></textarea>
-                                    <div style="margin-top: 0.5rem; text-align: right;">
-                                        <button id="direct-confirm-summary-btn" class="btn btn-small btn-primary">✅ 确认并继续</button>
+                                <!-- 并行分析结果横向显示 -->
+                                <div id="parallel-analyses-display" class="step-result" style="display: none; margin-top: 0.75rem;">
+                                    <div style="font-weight: 600; color: #232f3e; margin-bottom: 1rem; font-size: 1.1rem;">
+                                        🤖 请选择一个AI模型的分析结果：
+                                    </div>
+
+                                    <!-- 横向布局的3个模型结果 -->
+                                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                                        <!-- Nova Pro -->
+                                        <div class="model-result-card" data-model="nova" style="border: 2px solid #e0e0e0; border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.3s; background: #fff;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                                                <div style="font-weight: 600; color: #232f3e; font-size: 1rem;">
+                                                    <input type="radio" name="model-selection" value="nova" style="margin-right: 0.5rem;">
+                                                    Amazon Nova Pro
+                                                </div>
+                                                <div class="model-status" style="font-size: 1.2rem;"></div>
+                                            </div>
+                                            <div class="model-summary" style="font-size: 0.85rem; color: #666; line-height: 1.4; max-height: 150px; overflow-y: auto; white-space: pre-wrap;"></div>
+                                        </div>
+
+                                        <!-- Gemini 2.5 Flash -->
+                                        <div class="model-result-card" data-model="gemini_flash" style="border: 2px solid #e0e0e0; border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.3s; background: #fff;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                                                <div style="font-weight: 600; color: #232f3e; font-size: 1rem;">
+                                                    <input type="radio" name="model-selection" value="gemini_flash" style="margin-right: 0.5rem;">
+                                                    Gemini 2.5 Flash
+                                                </div>
+                                                <div class="model-status" style="font-size: 1.2rem;"></div>
+                                            </div>
+                                            <div class="model-summary" style="font-size: 0.85rem; color: #666; line-height: 1.4; max-height: 150px; overflow-y: auto; white-space: pre-wrap;"></div>
+                                        </div>
+
+                                        <!-- Gemini 2.5 Pro -->
+                                        <div class="model-result-card" data-model="gemini_pro" style="border: 2px solid #e0e0e0; border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.3s; background: #fff;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                                                <div style="font-weight: 600; color: #232f3e; font-size: 1rem;">
+                                                    <input type="radio" name="model-selection" value="gemini_pro" style="margin-right: 0.5rem;">
+                                                    Gemini 2.5 Pro
+                                                </div>
+                                                <div class="model-status" style="font-size: 1.2rem;"></div>
+                                            </div>
+                                            <div class="model-summary" style="font-size: 0.85rem; color: #666; line-height: 1.4; max-height: 150px; overflow-y: auto; white-space: pre-wrap;"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 选中模型的详细标准（可编辑） -->
+                                    <div id="selected-model-details" style="display: none; margin-top: 1rem; padding: 1rem; background: #f9f9f9; border-radius: 8px;">
+                                        <div style="font-weight: 600; color: #232f3e; margin-bottom: 0.5rem;">📋 高光判定标准（可编辑）：</div>
+                                        <textarea id="selected-criteria-content" style="width: 100%; min-height: 200px; white-space: pre-wrap; font-size: 0.85rem; color: #555; line-height: 1.5; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: inherit;"></textarea>
+                                        <div style="margin-top: 0.75rem; text-align: right;">
+                                            <button id="confirm-model-selection-btn" class="btn btn-primary" style="padding: 0.5rem 1.5rem;">✅ 确认选择并继续</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

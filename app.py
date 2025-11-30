@@ -677,29 +677,45 @@ def extract_direct():
                 print(f"[直接定位] 视频文件: {video_path}")
                 print(f"{'='*80}\n")
 
-                # 步骤1: 生成总结和标准
-                print(f"[直接定位-步骤1] 开始...")
+                # 步骤1: 并行生成总结和标准（Nova + Gemini）
+                print(f"[直接定位-步骤1] 开始并行分析...")
                 job_status['current_step'] = 1
                 job_status['progress'] = 10
-                job_status['step_messages'][1] = '正在分析视频内容...'
+                job_status['step_messages'][1] = '正在并行分析视频内容 (Nova + Gemini)...'
 
-                summary_and_criteria, compressed_path = direct_highlight_extractor.generate_summary_and_criteria(video_path)
-                print(f"[直接定位-步骤1] 完成，长度: {len(summary_and_criteria)} 字符")
+                # 调用并行分析
+                parallel_results = direct_highlight_extractor.generate_summary_and_criteria_parallel(video_path)
+                print(f"[直接定位-步骤1] 并行分析完成")
 
-                # 解析总结和标准
-                parts = summary_and_criteria.split('## 高光片段判定标准：')
-                summary = parts[0].replace('### Task 1: 视频总结', '').strip()
-                criteria = '## 高光片段判定标准：' + parts[1] if len(parts) > 1 else summary_and_criteria
+                # 解析每个模型的结果
+                analyses = {}
+                for model_key in ['nova', 'gemini_flash', 'gemini_pro']:
+                    result = parallel_results[model_key]
+                    if result['analysis']:
+                        parts = result['analysis'].split('## 高光片段判定标准：')
+                        summary = parts[0].replace('### Task 1: 视频总结', '').strip()
+                        criteria = '## 高光片段判定标准：' + parts[1] if len(parts) > 1 else result['analysis']
 
-                job_status['summary'] = summary
-                job_status['criteria'] = criteria
-                job_status['compressed_path'] = compressed_path
-                job_status['step_messages'][1] = '✅ 总结和标准生成完成'
+                        analyses[model_key] = {
+                            'model_name': result['model'],
+                            'summary': summary,
+                            'criteria': criteria,
+                            'full_analysis': result['analysis']
+                        }
+                    else:
+                        analyses[model_key] = {
+                            'model_name': result['model'],
+                            'error': result['error']
+                        }
+
+                job_status['parallel_analyses'] = analyses
+                job_status['compressed_path'] = parallel_results['compressed_path']
+                job_status['step_messages'][1] = '✅ 并行分析完成，等待选择'
                 job_status['progress'] = 30
 
-                # 等待用户确认
-                job_status['waiting_for'] = 'summary_confirmation'
-                print(f"[直接定位-步骤1] 等待用户确认...")
+                # 等待用户选择哪个AI的结果
+                job_status['waiting_for'] = 'model_selection'
+                print(f"[直接定位-步骤1] 等待用户选择模型...")
 
             except Exception as e:
                 print(f"\n{'='*80}")
@@ -727,9 +743,80 @@ def extract_direct():
         print(f"[直接定位API错误] {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/direct-select-model/<job_id>', methods=['POST'])
+def direct_select_model(job_id):
+    """用户选择AI模型结果"""
+    try:
+        if job_id not in highlight_jobs:
+            return jsonify({'error': '任务不存在'}), 404
+
+        job_status = highlight_jobs[job_id]
+
+        # 获取用户选择的模型和可能编辑的标准
+        data = request.get_json()
+        selected_model = data.get('model')  # 'nova', 'gemini_flash', 'gemini_pro'
+        edited_criteria = data.get('criteria')  # 用户可能编辑的标准
+
+        if selected_model not in job_status['parallel_analyses']:
+            return jsonify({'error': '无效的模型选择'}), 400
+
+        selected_analysis = job_status['parallel_analyses'][selected_model]
+
+        if 'error' in selected_analysis:
+            return jsonify({'error': f"所选模型分析失败: {selected_analysis['error']}"}), 400
+
+        # 保存用户选择
+        job_status['selected_model'] = selected_model
+        job_status['selected_model_name'] = selected_analysis['model_name']
+        job_status['summary'] = selected_analysis['summary']
+        job_status['criteria'] = edited_criteria if edited_criteria else selected_analysis['criteria']
+        job_status['confirmed_criteria'] = job_status['criteria']
+        job_status['waiting_for'] = None
+
+        print(f"[直接定位-步骤1] 用户选择了 {selected_model} ({selected_analysis['model_name']})")
+
+        # 启动步骤2
+        def continue_step2():
+            try:
+                print(f"[直接定位-步骤2] 开始识别高光时刻...")
+                job_status['current_step'] = 2
+                job_status['progress'] = 40
+                job_status['step_messages'][2] = '正在识别高光时刻...'
+
+                highlights_data = direct_highlight_extractor.identify_highlight_moments(
+                    job_status['compressed_path'],
+                    job_status['confirmed_criteria']
+                )
+
+                print(f"[直接定位-步骤2] 识别到 {len(highlights_data['highlights'])} 个高光片段")
+
+                job_status['highlights_data'] = highlights_data
+                job_status['step_messages'][2] = f'✅ 识别到 {len(highlights_data["highlights"])} 个高光片段'
+                job_status['progress'] = 60
+
+                # 等待用户确认
+                job_status['waiting_for'] = 'highlights_confirmation'
+                print(f"[直接定位-步骤2] 等待用户确认...")
+
+            except Exception as e:
+                print(f"[直接定位-步骤2错误] {str(e)}")
+                import traceback
+                traceback.print_exc()
+                job_status['status'] = 'failed'
+                job_status['error'] = str(e)
+
+        thread = threading.Thread(target=continue_step2)
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/direct-confirm-summary/<job_id>', methods=['POST'])
 def direct_confirm_summary(job_id):
-    """确认总结和标准，继续步骤2"""
+    """确认总结和标准，继续步骤2（保留向后兼容）"""
     try:
         if job_id not in highlight_jobs:
             return jsonify({'error': '任务不存在'}), 404

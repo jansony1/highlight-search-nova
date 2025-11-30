@@ -76,6 +76,26 @@ class HighlightExtractor {
         // 确认按钮 - 直接定位模式
         document.getElementById('direct-confirm-summary-btn')?.addEventListener('click', () => this.directConfirmSummary());
         document.getElementById('direct-confirm-highlights-btn')?.addEventListener('click', () => this.directConfirmHighlights());
+
+        // 模型选择卡片点击事件
+        document.querySelectorAll('.model-result-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                const model = card.dataset.model;
+                const radio = card.querySelector('input[type="radio"]');
+                radio.checked = true;
+                this.handleModelSelection(model);
+            });
+        });
+
+        // 模型选择radio变化事件
+        document.querySelectorAll('input[name="model-selection"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.handleModelSelection(e.target.value);
+            });
+        });
+
+        // 确认模型选择按钮
+        document.getElementById('confirm-model-selection-btn')?.addEventListener('click', () => this.confirmModelSelection());
     }
 
     handleMethodChange(method) {
@@ -437,7 +457,16 @@ class HighlightExtractor {
             }
         }
 
-        // 显示总结和标准
+        // 显示并行分析结果（新逻辑）
+        if (status.parallel_analyses && status.waiting_for === 'model_selection') {
+            const parallelDisplay = document.getElementById('parallel-analyses-display');
+            if (parallelDisplay && (parallelDisplay.style.display === 'none' || !parallelDisplay.style.display)) {
+                this.displayParallelAnalyses(status.parallel_analyses);
+                parallelDisplay.style.display = 'block';
+            }
+        }
+
+        // 显示总结和标准（向后兼容）
         if (status.summary && status.criteria && status.waiting_for === 'summary_confirmation') {
             const summaryInline = document.getElementById('direct-summary-inline');
             if (summaryInline && (summaryInline.style.display === 'none' || !summaryInline.style.display)) {
@@ -454,6 +483,96 @@ class HighlightExtractor {
                 document.getElementById('direct-highlights-content').value = JSON.stringify(status.highlights_data, null, 2);
                 highlightsInline.style.display = 'block';
             }
+        }
+    }
+
+    displayParallelAnalyses(analyses) {
+        console.log('[Parallel] Displaying analyses:', analyses);
+
+        // 存储分析结果
+        this.parallelAnalyses = analyses;
+
+        // 显示每个模型的结果
+        ['nova', 'gemini_flash', 'gemini_pro'].forEach(modelKey => {
+            const card = document.querySelector(`.model-result-card[data-model="${modelKey}"]`);
+            const summaryDiv = card.querySelector('.model-summary');
+            const statusDiv = card.querySelector('.model-status');
+
+            const analysis = analyses[modelKey];
+
+            if (analysis.error) {
+                // 显示错误
+                summaryDiv.textContent = `❌ 分析失败: ${analysis.error}`;
+                summaryDiv.style.color = '#d32f2f';
+                statusDiv.textContent = '❌';
+                card.style.opacity = '0.6';
+                card.style.pointerEvents = 'none';
+            } else {
+                // 显示总结
+                summaryDiv.textContent = analysis.summary || '无总结';
+                statusDiv.textContent = '✅';
+                card.style.opacity = '1';
+                card.style.pointerEvents = 'auto';
+            }
+        });
+    }
+
+    handleModelSelection(model) {
+        console.log('[Model] Selected:', model);
+
+        // 更新卡片样式
+        document.querySelectorAll('.model-result-card').forEach(card => {
+            if (card.dataset.model === model) {
+                card.style.border = '2px solid #ff9900';
+                card.style.background = '#fff8f0';
+            } else {
+                card.style.border = '2px solid #e0e0e0';
+                card.style.background = '#fff';
+            }
+        });
+
+        // 显示选中模型的详细标准
+        const analysis = this.parallelAnalyses[model];
+        if (analysis && !analysis.error) {
+            document.getElementById('selected-criteria-content').value = analysis.criteria;
+            document.getElementById('selected-model-details').style.display = 'block';
+            this.selectedModel = model;
+        }
+    }
+
+    async confirmModelSelection() {
+        if (!this.selectedModel) {
+            alert('请先选择一个模型');
+            return;
+        }
+
+        const criteria = document.getElementById('selected-criteria-content').value;
+
+        console.log('[Model] Confirming selection:', this.selectedModel);
+
+        // 禁用按钮
+        document.getElementById('selected-criteria-content').disabled = true;
+        document.getElementById('confirm-model-selection-btn').disabled = true;
+        document.getElementById('confirm-model-selection-btn').textContent = '✓ 已确认';
+
+        try {
+            const response = await fetch(`/api/direct-select-model/${this.jobId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    model: this.selectedModel,
+                    criteria: criteria
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                console.error('[Model] Selection failed:', error);
+                alert('选择失败: ' + (error.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('[Model] Failed to confirm selection:', error);
+            alert('确认失败: ' + error.message);
         }
     }
 
